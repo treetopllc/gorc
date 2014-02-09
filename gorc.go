@@ -27,7 +27,7 @@ func getwd() (string, error) {
 
 func installTests(name string) bool {
 	fmt.Print("\nInstalling tests: ")
-	run, failed := runCommand(name, searchTest, "go", "test", "-i")
+	run, failed := runCommand(false, name, searchTest, "go", "test", "-i")
 	if run == 0 && failed == 0 {
 		fmt.Println("No tests were found in or below the current working directory.")
 		return false
@@ -39,7 +39,7 @@ func installTests(name string) bool {
 
 func runTests(name string) {
 	fmt.Print("Running tests: ")
-	run, failed := runCommandParallel(name, searchTest, "go", "test")
+	run, failed := runCommandParallel(false, name, searchTest, "go", "test")
 	if run == 0 && failed == 0 {
 		fmt.Println("No tests were found in or below the current working directory.")
 	} else {
@@ -55,21 +55,21 @@ func runCover(name, out string) {
 	} else {
 		coverCmd = append(coverCmd, "-cover")
 	}
-	run, failed := runCommandParallel(name, searchTest, "go", coverCmd...)
+	run, failed := runCommandParallel(false, name, searchTest, "go", coverCmd...)
 	if run == 0 && failed == 0 {
 		fmt.Println("No tests were found in or below the current working directory.")
 	} else {
 		fmt.Printf("\n\n%d run. %d succeeded. %d failed. [%.0f%% success]\n\n", run, run-failed, failed, (float32((run-failed))/float32(run))*100)
 		if failed == 0 && out != "" {
 			viewer := fmt.Sprintf("-func=%s", out)
-			runCommandParallel(name, searchTest, "go", "tool", "cover", viewer)
+			runCommandParallel(true, name, searchTest, "go", "tool", "cover", viewer)
 		}
 	}
 }
 
 func vetPackages(name string) {
 	fmt.Printf("\nVetting packages: ")
-	run, failed := runCommandParallel(name, searchGo, "go", "vet")
+	run, failed := runCommandParallel(false, name, searchGo, "go", "vet")
 	if run == 0 && failed == 0 {
 		fmt.Println("No packages were found in or below the current working directory.")
 	} else {
@@ -79,7 +79,7 @@ func vetPackages(name string) {
 
 func raceTests(name string) {
 	fmt.Printf("\nRunning race tests: ")
-	run, failed := runCommandParallel(name, searchTest, "go", "test", "-race")
+	run, failed := runCommandParallel(false, name, searchTest, "go", "test", "-race")
 	if run == 0 && failed == 0 {
 		fmt.Println("No tests were found in or below the current working directory.")
 	} else {
@@ -87,8 +87,29 @@ func raceTests(name string) {
 	}
 }
 
-func runCommand(target, search, command string, args ...string) (int, int) {
-	var outputs []string
+type cmdOutput struct {
+	output string
+	err error
+}
+
+func countAndPrintOutputs(outputs []cmdOutput, verbose bool) int {
+	if len(outputs) != 0 {
+		var errCount int
+		for _, output := range outputs {
+			if verbose || output.err != nil && output.output != "" {
+				fmt.Printf("\n\n%s", output.output)
+			}
+			if output.err != nil {
+				errCount++
+			}
+		}
+		return errCount
+	}
+	return 0
+}
+
+func runCommand(verbose bool, target, search, command string, args ...string) (int, int) {
+	var outputs []cmdOutput
 	lastPrintLen := 0
 	currentJob := 1
 	directories := []string{}
@@ -126,25 +147,13 @@ func runCommand(target, search, command string, args ...string) (int, int) {
 
 		output, err := runShellCommand(directory, command, args...)
 
-		if err != nil {
-			outputs = append(outputs, output)
-		}
+		outputs = append(outputs, cmdOutput{output, err})
 	}
 
-	if len(outputs) != 0 {
-		for _, output := range outputs {
-			fmt.Printf("\n\n%s", output)
-		}
-		return currentJob - 1, len(outputs)
-	}
-	return currentJob - 1, 0
+	return currentJob - 1, countAndPrintOutputs(outputs, verbose)
 }
 
-func runCommandParallel(target, search, command string, args ...string) (int, int) {
-	type cmdOutput struct {
-		output string
-		err error
-	}
+func runCommandParallel(verbose bool, target, search, command string, args ...string) (int, int) {
 	var outputs []cmdOutput
 	lastPrintLen := 0
 	currentJob := 1
@@ -210,18 +219,7 @@ func runCommandParallel(target, search, command string, args ...string) (int, in
 
 	wg.Wait()
 
-	if len(outputs) != 0 {
-		var errCount int
-		for _, output := range outputs {
-			fmt.Printf("\n\n%s", output.output)
-			if output.err != nil {
-				errCount++
-			}
-		}
-		return currentJob - 1, errCount
-	}
-
-	return currentJob - 1, 0
+	return currentJob - 1, countAndPrintOutputs(outputs, verbose)
 }
 
 var exclusions []string
