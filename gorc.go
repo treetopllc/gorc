@@ -98,8 +98,9 @@ func countAndPrintOutputs(outputs []cmdOutput, verbose bool) int {
 	if len(outputs) != 0 {
 		var errCount int
 		for _, output := range outputs {
-			if verbose || output.err != nil && output.output != "" {
-				fmt.Printf("\n\n%s", output.output)
+			results := strings.TrimSpace(output.output)
+			if results != "" && (verbose || output.err != nil) {
+				fmt.Printf("\n\n%s", results)
 			}
 			if output.err != nil {
 				errCount++
