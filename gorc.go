@@ -47,6 +47,26 @@ func runTests(name string) {
 	}
 }
 
+func runCover(name, out string) {
+	fmt.Print("Generating test coverage: ")
+	coverCmd := []string{"test"}
+	if out != "" {
+		coverCmd = append(coverCmd, "-coverprofile", out)
+	} else {
+		coverCmd = append(coverCmd, "-cover")
+	}
+	run, failed := runCommandParallel(name, searchTest, "go", coverCmd...)
+	if run == 0 && failed == 0 {
+		fmt.Println("No tests were found in or below the current working directory.")
+	} else {
+		fmt.Printf("\n\n%d run. %d succeeded. %d failed. [%.0f%% success]\n\n", run, run-failed, failed, (float32((run-failed))/float32(run))*100)
+		if failed == 0 && out != "" {
+			viewer := fmt.Sprintf("-func=%s", out)
+			runCommandParallel(name, searchTest, "go", "tool", "cover", viewer)
+		}
+	}
+}
+
 func vetPackages(name string) {
 	fmt.Printf("\nVetting packages: ")
 	run, failed := runCommandParallel(name, searchGo, "go", "vet")
@@ -104,9 +124,9 @@ func runCommand(target, search, command string, args ...string) (int, int) {
 
 		currentJob++
 
-		output := runShellCommand(directory, command, args...)
+		output, err := runShellCommand(directory, command, args...)
 
-		if output != "" {
+		if err != nil {
 			outputs = append(outputs, output)
 		}
 	}
@@ -121,7 +141,11 @@ func runCommand(target, search, command string, args ...string) (int, int) {
 }
 
 func runCommandParallel(target, search, command string, args ...string) (int, int) {
-	var outputs []string
+	type cmdOutput struct {
+		output string
+		err error
+	}
+	var outputs []cmdOutput
 	lastPrintLen := 0
 	currentJob := 1
 	directories := []string{}
@@ -143,13 +167,14 @@ func runCommandParallel(target, search, command string, args ...string) (int, in
 	}
 
 	numCommands := len(directories)
-	outputChan := make(chan string, 10)
+	outputChan := make(chan cmdOutput, 10)
 	var wg sync.WaitGroup
 	wg.Add(numCommands)
 
 	for _, directory := range directories {
 		go func(dir string) {
-			outputChan <- runShellCommand(dir, command, args...)
+			out, err := runShellCommand(dir, command, args...)
+			outputChan <- cmdOutput{out, err}
 		}(directory)
 	}
 
@@ -177,9 +202,7 @@ func runCommandParallel(target, search, command string, args ...string) (int, in
 			}
 			currentJob++
 
-			if output != "" {
-				outputs = append(outputs, output)
-			}
+			outputs = append(outputs, output)
 
 			wg.Done()
 		}
@@ -188,10 +211,14 @@ func runCommandParallel(target, search, command string, args ...string) (int, in
 	wg.Wait()
 
 	if len(outputs) != 0 {
+		var errCount int
 		for _, output := range outputs {
-			fmt.Printf("\n\n%s", output)
+			fmt.Printf("\n\n%s", output.output)
+			if output.err != nil {
+				errCount++
+			}
 		}
-		return currentJob - 1, len(outputs)
+		return currentJob - 1, errCount
 	}
 
 	return currentJob - 1, 0
@@ -229,6 +256,26 @@ func main() {
 
 				if installTests(name) {
 					runTests(name)
+				} else {
+					fmt.Println("Test dependency installation failed. Aborting test run.")
+				}
+			})
+
+		commander.Map("cover [name=(string)] [out=(string)]", "Runs coverage analysis",
+			"If an out argument is specified, analysis is saved to the file. If no name argument is specified, runs all tests recursively. If a name argument is specified, runs just that test, unless the argument is \"all\", in which case it runs all tests, including those in the exclusion list.",
+			func(args objx.Map) {
+				out := ""
+				if arg, ok := args["out"]; ok {
+					out = arg.(string)
+				}
+
+				name := ""
+				if arg, ok := args["name"]; ok {
+					name = arg.(string)
+				}
+
+				if installTests(name) {
+					runCover(name, out)
 				} else {
 					fmt.Println("Test dependency installation failed. Aborting test run.")
 				}

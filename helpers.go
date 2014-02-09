@@ -34,14 +34,11 @@ func formatExclusionsForPrint(exclusions []string) string {
 }
 
 // runShellCommand runs a shell command in a specified directory and returns
-// a string containing all error output if the command fails
-func runShellCommand(directory, command string, arguments ...string) string {
+// a string containing all output.
+func runShellCommand(directory, command string, arguments ...string) (string, error) {
 	shellCommand := exec.Command(command, arguments...)
 	shellCommand.Dir = directory
 
-	if output, error := shellCommand.CombinedOutput(); error != nil {
-		return string(output)
-	}
-
-	return ""
+	output, err := shellCommand.CombinedOutput()
+	return string(output), err
 }
