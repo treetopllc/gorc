@@ -69,9 +69,9 @@ func runCover(name, out, viewer string, coverArgs []string) {
 	}
 }
 
-func vetPackages(name string) {
+func vetPackages(name string, verbose bool) {
 	fmt.Printf("\nVetting packages: ")
-	run, failed := runCommandParallel(false, name, searchGo, "go", "vet")
+	run, failed := runCommandParallel(verbose, name, searchGo, "go", "vet")
 	if run == 0 && failed == 0 {
 		fmt.Println("No packages were found in or below the current working directory.")
 	} else {
@@ -302,14 +302,21 @@ func main() {
 				installTests(name)
 			})
 
-		commander.Map("vet [name=(string)]", "Vets packages, or named package",
+		commander.Map("vet [name=(string)] [verbose=(bool)]", "Vets packages, or named package",
 			"If no name argument is specified, vets all packages recursively. If a name argument is specified, vets just that package, unless the argument is \"all\", in which case it vets all packages, including those in the exclusion list.",
 			func(args objx.Map) {
 				name := ""
 				if _, ok := args["name"]; ok {
 					name = args["name"].(string)
 				}
-				vetPackages(name)
+				verbose := false
+				if arg, ok := args["verbose"]; ok {
+					argStr := strings.ToLower(arg.(string))
+					if argStr != "false" && argStr != "no" {
+						verbose = true
+					}
+				}
+				vetPackages(name, verbose)
 			})
 
 		commander.Map("race [name=(string)]", "Runs race detector on tests, or named test",
