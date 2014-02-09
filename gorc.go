@@ -47,22 +47,24 @@ func runTests(name string) {
 	}
 }
 
-func runCover(name, out string) {
+func runCover(name, out, viewer string, coverArgs []string) {
 	fmt.Print("Generating test coverage: ")
 	coverCmd := []string{"test"}
 	if out != "" {
 		coverCmd = append(coverCmd, "-coverprofile", out)
 	} else {
 		coverCmd = append(coverCmd, "-cover")
+		coverCmd = append(coverCmd, coverArgs...)
 	}
 	run, failed := runCommandParallel(false, name, searchTest, "go", coverCmd...)
 	if run == 0 && failed == 0 {
 		fmt.Println("No tests were found in or below the current working directory.")
 	} else {
 		fmt.Printf("\n\n%d run. %d succeeded. %d failed. [%.0f%% success]\n\n", run, run-failed, failed, (float32((run-failed))/float32(run))*100)
-		if failed == 0 && out != "" {
-			viewer := fmt.Sprintf("-func=%s", out)
-			runCommandParallel(true, name, searchTest, "go", "tool", "cover", viewer)
+		if failed == 0 && out != "" && viewer != "" {
+			viewOpt := fmt.Sprintf("-%s=%s", viewer, out)
+			viewArgs := append([]string{ "tool", "cover", viewOpt }, coverArgs...)
+			runCommandParallel(true, name, searchTest, "go", viewArgs...)
 		}
 	}
 }
@@ -259,8 +261,8 @@ func main() {
 				}
 			})
 
-		commander.Map("cover [name=(string)] [out=(string)]", "Runs coverage analysis",
-			"If an out argument is specified, analysis is saved to the file. If no name argument is specified, runs all tests recursively. If a name argument is specified, runs just that test, unless the argument is \"all\", in which case it runs all tests, including those in the exclusion list.",
+		commander.Map("cover [name=(string)] [out=(string)] [viewer=(string)] [coverArgs=(string)...]", "Runs coverage analysis",
+			"If an out argument is specified, analysis is saved to the file. A viewer may then be specified in order to display the coverage results. If no name argument is specified, runs all tests recursively. If a name argument is specified, runs just that test, unless the argument is \"all\", in which case it runs all tests, including those in the exclusion list.",
 			func(args objx.Map) {
 				out := ""
 				if arg, ok := args["out"]; ok {
@@ -272,8 +274,18 @@ func main() {
 					name = arg.(string)
 				}
 
+				viewer := ""
+				if arg, ok := args["viewer"]; ok {
+					viewer = arg.(string)
+				}
+
+				var coverArgs []string
+				if arg, ok := args["coverArgs"]; ok {
+					coverArgs = arg.([]string)
+				}
+
 				if installTests(name) {
-					runCover(name, out)
+					runCover(name, out, viewer, coverArgs)
 				} else {
 					fmt.Println("Test dependency installation failed. Aborting test run.")
 				}
