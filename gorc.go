@@ -37,9 +37,9 @@ func installTests(name string) bool {
 	return failed == 0
 }
 
-func runTests(name string) {
+func runTests(name string, verbose bool) {
 	fmt.Print("Running tests: ")
-	run, failed := runCommandParallel(false, name, searchTest, "go", "test")
+	run, failed := runCommandParallel(verbose, name, searchTest, "go", "test")
 	if run == 0 && failed == 0 {
 		fmt.Println("No tests were found in or below the current working directory.")
 	} else {
@@ -225,6 +225,16 @@ func runCommandParallel(verbose bool, target, search, command string, args ...st
 	return currentJob - 1, countAndPrintOutputs(outputs, verbose)
 }
 
+func parseBoolArg(args objx.Map, name string) bool {
+	if arg, ok := args[name]; ok {
+		argStr := strings.ToLower(arg.(string))
+		if argStr != "false" && argStr != "no" {
+			return true
+		}
+	}
+	return false
+}
+
 var exclusions []string
 
 func main() {
@@ -241,22 +251,23 @@ func main() {
 				}
 
 				if installTests(name) {
-					runTests(name)
+					runTests(name, false)
 				} else {
 					fmt.Printf("Test dependency installation failed. Aborting test run.\n\n")
 				}
 			})
 
-		commander.Map("test [name=(string)]", "Runs tests, or named test",
+		commander.Map("test [name=(string)] [verbose=(bool)]", "Runs tests, or named test",
 			"If no name argument is specified, runs all tests recursively. If a name argument is specified, runs just that test, unless the argument is \"all\", in which case it runs all tests, including those in the exclusion list.",
 			func(args objx.Map) {
 				name := ""
 				if _, ok := args["name"]; ok {
 					name = args["name"].(string)
 				}
+				verbose := parseBoolArg(args, "verbose")
 
 				if installTests(name) {
-					runTests(name)
+					runTests(name, verbose)
 				} else {
 					fmt.Println("Test dependency installation failed. Aborting test run.")
 				}
@@ -309,13 +320,7 @@ func main() {
 				if _, ok := args["name"]; ok {
 					name = args["name"].(string)
 				}
-				verbose := false
-				if arg, ok := args["verbose"]; ok {
-					argStr := strings.ToLower(arg.(string))
-					if argStr != "false" && argStr != "no" {
-						verbose = true
-					}
-				}
+				verbose := parseBoolArg(args, "verbose")
 				vetPackages(name, verbose)
 			})
 
