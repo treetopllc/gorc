@@ -64,9 +64,19 @@ func runCover(name, out, viewer string, coverArgs []string) {
 		fmt.Printf("\n\n%d run. %d succeeded. %d failed. [%.0f%% success]\n\n", run, run-failed, failed, (float32((run-failed))/float32(run))*100)
 		if failed == 0 && out != "" && viewer != "" {
 			viewOpt := fmt.Sprintf("-%s=%s", viewer, out)
-			viewArgs := append([]string{ "tool", "cover", viewOpt }, coverArgs...)
+			viewArgs := append([]string{"tool", "cover", viewOpt}, coverArgs...)
 			runCommandParallel(true, false, name, searchTest, "go", viewArgs...)
 		}
+	}
+}
+
+func lintPackages(name string, verbose bool) {
+	fmt.Printf("\nRunning linter: ")
+	run, failed := runCommandParallel(verbose, true, name, searchGo, "golint")
+	if run == 0 && failed == 0 {
+		fmt.Println("No packages were found in or below the current working directory.")
+	} else {
+		fmt.Printf("\n\n%d linted. %d succeeded. %d failed. [%.0f%% success]\n\n", run, run-failed, failed, (float32((run-failed))/float32(run))*100)
 	}
 }
 
@@ -321,6 +331,17 @@ func main() {
 					name = args["name"].(string)
 				}
 				installTests(name)
+			})
+
+		commander.Map("lint [name=(string)] [verbose=(bool)]", "Lints packages, or named package",
+			"If no name argument is specified, lints all packages recursively. If a name argument is specified, lints just that package, unless the argument is \"all\", in which case it lints all packages, including those in the exclusion list.",
+			func(args objx.Map) {
+				name := ""
+				if _, ok := args["name"]; ok {
+					name = args["name"].(string)
+				}
+				verbose := parseBoolArg(args, "verbose")
+				lintPackages(name, verbose)
 			})
 
 		commander.Map("vet [name=(string)] [verbose=(bool)]", "Vets packages, or named package",
