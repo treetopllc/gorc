@@ -5,6 +5,7 @@ import (
 	"github.com/stretchr/commander"
 	"github.com/stretchr/objx"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -39,7 +40,7 @@ func installTests(name string) bool {
 
 func runTests(name string, verbose bool) {
 	fmt.Print("Running tests: ")
-	run, failed := runCommandParallel(verbose, name, searchTest, "go", "test")
+	run, failed := runCommandParallel(verbose, false, name, searchTest, "go", "test")
 	if run == 0 && failed == 0 {
 		fmt.Println("No tests were found in or below the current working directory.")
 	} else {
@@ -56,7 +57,7 @@ func runCover(name, out, viewer string, coverArgs []string) {
 		coverCmd = append(coverCmd, "-cover")
 		coverCmd = append(coverCmd, coverArgs...)
 	}
-	run, failed := runCommandParallel(false, name, searchTest, "go", coverCmd...)
+	run, failed := runCommandParallel(false, false, name, searchTest, "go", coverCmd...)
 	if run == 0 && failed == 0 {
 		fmt.Println("No tests were found in or below the current working directory.")
 	} else {
@@ -64,14 +65,14 @@ func runCover(name, out, viewer string, coverArgs []string) {
 		if failed == 0 && out != "" && viewer != "" {
 			viewOpt := fmt.Sprintf("-%s=%s", viewer, out)
 			viewArgs := append([]string{ "tool", "cover", viewOpt }, coverArgs...)
-			runCommandParallel(true, name, searchTest, "go", viewArgs...)
+			runCommandParallel(true, false, name, searchTest, "go", viewArgs...)
 		}
 	}
 }
 
 func vetPackages(name string, verbose bool) {
 	fmt.Printf("\nVetting packages: ")
-	run, failed := runCommandParallel(verbose, name, searchGo, "go", "vet")
+	run, failed := runCommandParallel(verbose, false, name, searchGo, "go", "vet")
 	if run == 0 && failed == 0 {
 		fmt.Println("No packages were found in or below the current working directory.")
 	} else {
@@ -81,7 +82,7 @@ func vetPackages(name string, verbose bool) {
 
 func raceTests(name string) {
 	fmt.Printf("\nRunning race tests: ")
-	run, failed := runCommandParallel(false, name, searchTest, "go", "test", "-race")
+	run, failed := runCommandParallel(false, false, name, searchTest, "go", "test", "-race")
 	if run == 0 && failed == 0 {
 		fmt.Println("No tests were found in or below the current working directory.")
 	} else {
@@ -91,7 +92,7 @@ func raceTests(name string) {
 
 type cmdOutput struct {
 	output string
-	err error
+	err    error
 }
 
 func countAndPrintOutputs(outputs []cmdOutput, verbose bool) int {
@@ -156,7 +157,7 @@ func runCommand(verbose bool, target, search, command string, args ...string) (i
 	return currentJob - 1, countAndPrintOutputs(outputs, verbose)
 }
 
-func runCommandParallel(verbose bool, target, search, command string, args ...string) (int, int) {
+func runCommandParallel(verbose, glob bool, target, search, command string, args ...string) (int, int) {
 	var outputs []cmdOutput
 	lastPrintLen := 0
 	currentJob := 1
@@ -185,7 +186,16 @@ func runCommandParallel(verbose bool, target, search, command string, args ...st
 
 	for _, directory := range directories {
 		go func(dir string) {
-			out, err := runShellCommand(dir, command, args...)
+			shellArgs := make([]string, len(args))
+			copy(shellArgs, args)
+			if glob {
+				pattern := fmt.Sprintf("%s/*%s", dir, search)
+				files, err := filepath.Glob(pattern)
+				if err == nil {
+					shellArgs = append(shellArgs, files...)
+				}
+			}
+			out, err := runShellCommand(dir, command, shellArgs...)
 			outputChan <- cmdOutput{out, err}
 		}(directory)
 	}
