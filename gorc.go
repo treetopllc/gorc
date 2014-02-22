@@ -38,7 +38,7 @@ func installTests(name string) bool {
 	return failed == 0
 }
 
-func runTests(name string, verbose bool) {
+func runTests(name string, verbose bool) bool {
 	fmt.Print("Running tests: ")
 	run, failed := runCommandParallel(verbose, false, name, searchTest, "go", "test")
 	if run == 0 && failed == 0 {
@@ -46,9 +46,10 @@ func runTests(name string, verbose bool) {
 	} else {
 		fmt.Printf("\n\n%d run. %d succeeded. %d failed. [%.0f%% success]\n\n", run, run-failed, failed, (float32((run-failed))/float32(run))*100)
 	}
+	return failed == 0
 }
 
-func runCover(name, out, viewer string, coverArgs []string) {
+func runCover(name, out, viewer string, coverArgs []string) bool {
 	fmt.Print("Generating test coverage: ")
 	coverCmd := []string{"test"}
 	if out != "" {
@@ -68,9 +69,10 @@ func runCover(name, out, viewer string, coverArgs []string) {
 			runCommandParallel(true, false, name, searchTest, "go", viewArgs...)
 		}
 	}
+	return failed == 0
 }
 
-func lintPackages(name string, verbose bool) {
+func lintPackages(name string, verbose bool) bool {
 	fmt.Printf("\nRunning linter: ")
 	run, failed := runCommandParallel(verbose, true, name, searchGo, "golint")
 	if run == 0 && failed == 0 {
@@ -78,9 +80,10 @@ func lintPackages(name string, verbose bool) {
 	} else {
 		fmt.Printf("\n\n%d linted. %d succeeded. %d failed. [%.0f%% success]\n\n", run, run-failed, failed, (float32((run-failed))/float32(run))*100)
 	}
+	return failed == 0
 }
 
-func vetPackages(name string, verbose bool) {
+func vetPackages(name string, verbose bool) bool {
 	fmt.Printf("\nVetting packages: ")
 	run, failed := runCommandParallel(verbose, false, name, searchGo, "go", "vet")
 	if run == 0 && failed == 0 {
@@ -88,6 +91,7 @@ func vetPackages(name string, verbose bool) {
 	} else {
 		fmt.Printf("\n\n%d vetted. %d succeeded. %d failed. [%.0f%% success]\n\n", run, run-failed, failed, (float32((run-failed))/float32(run))*100)
 	}
+	return failed == 0
 }
 
 func raceTests(name string) {
@@ -270,10 +274,14 @@ func main() {
 					name = args["name"].(string)
 				}
 
+				success := false
 				if installTests(name) {
-					runTests(name, false)
+					success = runTests(name, false)
 				} else {
 					fmt.Printf("Test dependency installation failed. Aborting test run.\n\n")
+				}
+				if !success {
+					os.Exit(1)
 				}
 			})
 
@@ -286,10 +294,14 @@ func main() {
 				}
 				verbose := parseBoolArg(args, "verbose")
 
+				success := false
 				if installTests(name) {
-					runTests(name, verbose)
+					success = runTests(name, verbose)
 				} else {
 					fmt.Println("Test dependency installation failed. Aborting test run.")
+				}
+				if !success {
+					os.Exit(1)
 				}
 			})
 
@@ -316,10 +328,14 @@ func main() {
 					coverArgs = arg.([]string)
 				}
 
+				success := false
 				if installTests(name) {
-					runCover(name, out, viewer, coverArgs)
+					success = runCover(name, out, viewer, coverArgs)
 				} else {
 					fmt.Println("Test dependency installation failed. Aborting test run.")
+				}
+				if !success {
+					os.Exit(1)
 				}
 			})
 
@@ -341,7 +357,9 @@ func main() {
 					name = args["name"].(string)
 				}
 				verbose := parseBoolArg(args, "verbose")
-				lintPackages(name, verbose)
+				if !lintPackages(name, verbose) {
+					os.Exit(1)
+				}
 			})
 
 		commander.Map("vet [name=(string)] [verbose=(bool)]", "Vets packages, or named package",
@@ -352,7 +370,9 @@ func main() {
 					name = args["name"].(string)
 				}
 				verbose := parseBoolArg(args, "verbose")
-				vetPackages(name, verbose)
+				if !vetPackages(name, verbose) {
+					os.Exit(1)
+				}
 			})
 
 		commander.Map("race [name=(string)]", "Runs race detector on tests, or named test",
