@@ -42,12 +42,19 @@ func include(directory string, config map[string]interface{}) {
 	writeConfig(config)
 }
 
+// Set a timeout for testing
+func timeoutAfter(timeout string, config map[string]interface{}) {
+	config[configKeyTimeout] = timeout
+	writeConfig(config)
+}
+
 // configEmpty determines if the configuration object is empty, allowing the configuration file to be deleted
 func configEmpty(config map[string]interface{}) bool {
 
 	empty := false
 
-	if len(config[configKeyExclusions].([]string)) == 0 {
+	if len(config[configKeyExclusions].([]string)) == 0 &&
+		len(config[configKeyTimeout].(string)) == 0 {
 		empty = true
 	}
 
@@ -82,6 +89,7 @@ func writeConfig(config map[string]interface{}) {
 func readConfig() map[string]interface{} {
 	var config = make(map[string]interface{})
 	config[configKeyExclusions] = make([]string, 0)
+	config[configKeyTimeout] = ""
 
 	// If a configuration file exists, load and decode it
 	if fileData, fileError := ioutil.ReadFile(configFilename); fileError == nil {

@@ -4,6 +4,9 @@ const (
 	// configKeyExclusions is the string for the key in the configuration object at which the exclusions list is stored
 	configKeyExclusions = "exclusions"
 
+	// configKeyTimeout is the string for the key in the configuration object at which the timeout is stored
+	configKeyTimeout = "timeout"
+
 	// configFilename is the string for the name of the gorc configuration file
 	configFilename = ".gorc"
 )

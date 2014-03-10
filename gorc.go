@@ -26,6 +26,14 @@ func getwd() (string, error) {
 	return directory, error
 }
 
+func addTimeoutArg(args []string) []string {
+	if timeout != "" {
+		timeoutOpt := fmt.Sprintf("-timeout=%s", timeout)
+		args = append(args, timeoutOpt)
+	}
+	return args
+}
+
 func installTests(name string) bool {
 	fmt.Print("\nInstalling tests: ")
 	run, failed := runCommand(false, name, searchTest, "go", "test", "-i")
@@ -54,8 +62,10 @@ func runCover(name, out, viewer string, coverArgs []string) bool {
 	coverCmd := []string{"test"}
 	if out != "" {
 		coverCmd = append(coverCmd, "-coverprofile", out)
+		coverCmd = addTimeoutArg(coverCmd)
 	} else {
 		coverCmd = append(coverCmd, "-cover")
+		coverCmd = addTimeoutArg(coverCmd)
 		coverCmd = append(coverCmd, coverArgs...)
 	}
 	run, failed := runCommandParallel(false, false, name, searchTest, "go", coverCmd...)
@@ -260,11 +270,13 @@ func parseBoolArg(args objx.Map, name string) bool {
 }
 
 var exclusions []string
+var timeout string
 
 func main() {
 
 	var config = readConfig()
 	exclusions = config[configKeyExclusions].([]string)
+	timeout = config[configKeyTimeout].(string)
 
 	commander.Go(func() {
 		commander.Map(commander.DefaultCommand, "", "",
@@ -406,6 +418,13 @@ func main() {
 			func(args objx.Map) {
 				fmt.Printf("\n%s\n\n", formatExclusionsForPrint(exclusions))
 			})
+
+		commander.Map("timeout value=(string)", "Sets the test timeout", "",
+			func(args objx.Map) {
+				timeoutAfter(args["value"].(string), config)
+				fmt.Printf("\nSet test timeout to \"%s\".\n", args["value"])
+			})
+
 	})
 
 }
